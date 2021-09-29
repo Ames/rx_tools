@@ -136,6 +136,7 @@ void usage(void)
 		"\t[-g tuner gain(s) (ex: 20, 40, LNA=40,VGA=20,AMP=0)]\n"
 		"\t[-p ppm_error (default: 0)]\n"
 		"\t[-S tuner_sleep_usec (default: 5000)]\n"
+		"\t[-B dump_buffers (default: 1)]\n"
 		"\t[-R tuner_retry_max (default: 3)]\n"
 		"\tfilename (a '-' dumps samples to stdout)\n"
 		"\t (omitting the filename also uses stdout)\n"
@@ -545,9 +546,10 @@ void frequency_range(char *arg, double crop)
 static int16_t dump[BUFFER_DUMP * sizeof(int16_t) * 2] = {0};
 static int tuner_sleep_usec = 5000;
 static int tuner_retry_max = 3;
+static int dump_buffers = 1;
 void retune(SoapySDRDevice *d, SoapySDRStream *s, int64_t freq, size_t channel)
 {
-	int r, i;
+	int r, i, j;
 
 	SoapySDRKwargs args = {0};
 	r = SoapySDRDevice_setFrequency(d, SOAPY_SDR_RX, channel, (double)freq, &args);
@@ -564,14 +566,16 @@ void retune(SoapySDRDevice *d, SoapySDRStream *s, int64_t freq, size_t channel)
 	long long timeNs = 0;
 	long timeoutNs = 1000000;
 
-	for (i = 0; i < tuner_retry_max; ++i) {
-		r = SoapySDRDevice_readStream(dev, stream, buffs, BUFFER_DUMP, &flags, &timeNs, timeoutNs);
-		if (r < 0) {
-			//fprintf(stderr, "Warning: attempt #%d of %d, bad retune at %lli Hz, r=%d, flags=%d\n", i + 1, tuner_retry_max, freq, r, flags);
-			// only logged if all attempts failed below
-		} else {
-			//fprintf(stderr, "Retune succeeded attempt #%d of %d at %lli Hz\n", i + 1, tuner_retry_max, freq);
-			break;
+	for (j = 0; j < dump_buffers; ++j){
+		for (i = 0; i < tuner_retry_max; ++i) {
+			r = SoapySDRDevice_readStream(dev, stream, buffs, BUFFER_DUMP, &flags, &timeNs, timeoutNs);
+			if (r < 0) {
+				//fprintf(stderr, "Warning: attempt #%d of %d, bad retune at %lli Hz, r=%d, flags=%d\n", i + 1, tuner_retry_max, freq, r, flags);
+				// only logged if all attempts failed below
+			} else {
+				//fprintf(stderr, "Retune succeeded attempt #%d of %d at %lli Hz\n", i + 1, tuner_retry_max, freq);
+				break;
+			}
 		}
 	}
 
@@ -845,7 +849,7 @@ int main(int argc, char **argv)
 	char *antenna_str = NULL;
 	freq_optarg = "";
 
-	while ((opt = getopt(argc, argv, "a:C:f:i:s:t:d:g:p:e:w:c:F:1PD:OS:R:h")) != -1) {
+	while ((opt = getopt(argc, argv, "a:C:f:i:s:t:d:g:p:e:w:c:F:1PD:OS:B:R:h")) != -1) {
 		switch (opt) {
 		case 'a':
 			antenna_str = optarg;
@@ -920,6 +924,9 @@ int main(int argc, char **argv)
 			break;
 		case 'S':
 			tuner_sleep_usec = atoi(optarg);
+			break;
+		case 'B':
+			dump_buffers = atoi(optarg);
 			break;
 		case 'R':
 			tuner_retry_max = atoi(optarg);
